@@ -13,11 +13,6 @@ jobs:
       - name: Set up Xcode
         run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 
-      - name: Install Dependencies
-        run: |
-          brew install --formula cocoapods
-          pod install --repo-update || pod install
-
       - name: Build the Safari Extension
         run: |
           xcodebuild -project SafariBlocker.xcodeproj \
@@ -42,4 +37,5 @@ jobs:
         with:
           name: SafariBlocker-IPA
           path: output/*.ipa
+
  
