@@ -10,11 +10,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Verify Files
+        run: ls -R
+
+      - name: Find Project File
+        run: find . -name "*.xcodeproj"
+
       - name: Set up Xcode
         run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 
       - name: Build the Safari Extension
         run: |
+          PROJECT_PATH=$(find . -name "SafariBlocker.xcodeproj" | head -n 1)
+          if [ -z "$PROJECT_PATH" ]; then
+            echo "❌ ERROR: SafariBlocker.xcodeproj not found!"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$PROJECT_PATH")
+          cd "$PROJECT_DIR"
           xcodebuild -project SafariBlocker.xcodeproj \
             -scheme SafariBlocker \
             -sdk iphoneos \
@@ -37,5 +50,3 @@ jobs:
         with:
           name: SafariBlocker-IPA
           path: output/*.ipa
-
- 
