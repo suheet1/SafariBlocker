@@ -24,13 +24,22 @@ jobs:
           ls -R
           echo "🔍 Searching for .xcodeproj file..."
           find . -name "*.xcodeproj"
+          echo "🔍 Searching for .xcworkspace file..."
+          find . -name "*.xcworkspace"
 
-      - name: Find SafariBlocker.xcodeproj
+      - name: Generate Xcode Project (if missing)
+        run: |
+          if [ -z "$(find . -name '*.xcodeproj')" ]; then
+            echo "⚠️ No .xcodeproj found! Trying to generate it..."
+            swift package generate-xcodeproj
+          fi
+
+      - name: Find Xcode Project
         id: find_project
         run: |
-          PROJECT_PATH=$(find . -name "SafariBlocker.xcodeproj" | head -n 1)
+          PROJECT_PATH=$(find . -name "*.xcodeproj" | head -n 1)
           if [ -z "$PROJECT_PATH" ]; then
-            echo "❌ ERROR: SafariBlocker.xcodeproj not found!"
+            echo "❌ ERROR: No .xcodeproj found even after generation!"
             exit 1
           fi
           PROJECT_DIR=$(dirname "$PROJECT_PATH")
@@ -41,19 +50,49 @@ jobs:
         run: |
           brew install cocoapods
           cd "$PROJECT_DIR"
-          pod install || echo "No Podfile found, skipping Cocoapods install."
+          if [ -f "Podfile" ]; then
+            pod install
+          else
+            echo "⚠️ No Podfile found, skipping Cocoapods install."
+          fi
+
+      - name: Detect Workspace or Project
+        id: detect_xcode_file
+        run: |
+          if [ -n "$(find $PROJECT_DIR -name '*.xcworkspace')" ]; then
+            XCFILE=$(find $PROJECT_DIR -name '*.xcworkspace' | head -n 1)
+            echo "✅ Found workspace: $XCFILE"
+            echo "XCFILE=$XCFILE" >> $GITHUB_ENV
+            echo "XCTYPE=workspace" >> $GITHUB_ENV
+          else
+            XCFILE=$(find $PROJECT_DIR -name '*.xcodeproj' | head -n 1)
+            echo "✅ Found project: $XCFILE"
+            echo "XCFILE=$XCFILE" >> $GITHUB_ENV
+            echo "XCTYPE=project" >> $GITHUB_ENV
+          fi
 
       - name: Build the SafariBlocker App
         run: |
           cd "$PROJECT_DIR"
-          xcodebuild -workspace SafariBlocker.xcworkspace \
-            -scheme SafariBlocker \
-            -sdk iphoneos \
-            -configuration Release \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            -archivePath SafariBlocker.xcarchive archive
+          if [ "$XCTYPE" == "workspace" ]; then
+            xcodebuild -workspace "$XCFILE" \
+              -scheme SafariBlocker \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              -archivePath SafariBlocker.xcarchive archive
+          else
+            xcodebuild -project "$XCFILE" \
+              -scheme SafariBlocker \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              -archivePath SafariBlocker.xcarchive archive
+          fi
 
       - name: Export IPA
         run: |
