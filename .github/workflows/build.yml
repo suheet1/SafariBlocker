@@ -1,6 +1,12 @@
-name: Build & Package IPA
+name: Build SafariBlocker IPA
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - main  # Change this if your default branch is different
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -9,17 +15,18 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensures the full repo is cloned
 
-      - name: Verify Files
-        run: ls -R
+      - name: Debug Repository Structure
+        run: |
+          echo "📂 Listing all files in the repository..."
+          ls -R
+          echo "🔍 Searching for .xcodeproj file..."
+          find . -name "*.xcodeproj"
 
-      - name: Find Project File
-        run: find . -name "*.xcodeproj"
-
-      - name: Set up Xcode
-        run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-
-      - name: Build the Safari Extension
+      - name: Find SafariBlocker.xcodeproj
+        id: find_project
         run: |
           PROJECT_PATH=$(find . -name "SafariBlocker.xcodeproj" | head -n 1)
           if [ -z "$PROJECT_PATH" ]; then
@@ -27,8 +34,19 @@ jobs:
             exit 1
           fi
           PROJECT_DIR=$(dirname "$PROJECT_PATH")
+          echo "✅ Found project in $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Install Dependencies
+        run: |
+          brew install cocoapods
           cd "$PROJECT_DIR"
-          xcodebuild -project SafariBlocker.xcodeproj \
+          pod install || echo "No Podfile found, skipping Cocoapods install."
+
+      - name: Build the SafariBlocker App
+        run: |
+          cd "$PROJECT_DIR"
+          xcodebuild -workspace SafariBlocker.xcworkspace \
             -scheme SafariBlocker \
             -sdk iphoneos \
             -configuration Release \
@@ -37,8 +55,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             -archivePath SafariBlocker.xcarchive archive
 
-      - name: Package IPA
+      - name: Export IPA
         run: |
+          cd "$PROJECT_DIR"
           mkdir -p output
           xcodebuild -exportArchive \
             -archivePath SafariBlocker.xcarchive \
@@ -48,5 +67,5 @@ jobs:
       - name: Upload IPA as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SafariBlocker-IPA
-          path: output/*.ipa
+          name: SafariBlocker.ipa
+          path: ${{ env.PROJECT_DIR }}/output/*.ipa
